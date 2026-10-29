@@ -354,7 +354,9 @@ function countStatuses() {
 }
 const setHTML = (el, h) => { if (el._h !== h) { el.innerHTML = h; el._h = h; } };
 function renderHUD() {
-  const n = countStatuses(), free = seats.length - CFG.crew.length;
+  const n = countStatuses();
+  const seated = CFG.crew.filter((b) => b.seat != null && seats[b.seat]).length;
+  const free = Math.max(0, seats.length - seated);
   const chips = [["working", n.working, STATUS.coding.c], ["needs you", n.needs_you, STATUS.needs_you.c], ["done", n.done, STATUS.done.c],
     ["idle", n.idle, STATUS.idle.c], ["free seats", free, "#cfd1d8"]];
   if (n.error) chips.splice(2, 0, ["error", n.error, STATUS.error.c]);
