@@ -35,7 +35,9 @@ body{display:flex}
 .cardhead{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px}
 .cardhead h2{font-size:11px;letter-spacing:2.5px;font-weight:700}
 .cardhead span{font-size:8px;letter-spacing:1.3px;color:var(--mut)}
-#crew{list-style:none;display:flex;flex-direction:column;gap:3px}
+#crewcard{flex:0 1 42%;min-height:0;display:flex;flex-direction:column;overflow:hidden}
+#crewcard .cardhead{flex:none}
+#crew{list-style:none;display:flex;flex-direction:column;gap:3px;overflow-y:auto;flex:1;min-height:0}
 #crew li{display:flex;align-items:center;gap:8px;padding:4px 4px;border-radius:6px;cursor:pointer}
 #crew li:hover,#crew li.sel{background:#181a20}
 .av{width:24px;height:24px;flex:none}
@@ -54,7 +56,13 @@ body{display:flex}
 .fhead .pill{margin-left:auto}
 .flabel{font-size:8px;letter-spacing:1.5px;color:var(--mut);margin-top:12px}
 .ftitle{font-size:12.5px;font-weight:600;margin-top:3px}
+#fgauge{display:block;width:100%;height:auto;margin-top:8px;border-radius:6px;background:#0a0b10}
 .prog{display:flex;align-items:center;gap:8px;margin-top:9px;font-size:8px;color:var(--mut)}
+.bar i{transition:none}
+.bubble .tw-cursor{display:inline-block;width:2px;height:1em;margin-left:1px;background:#FF6B5C;vertical-align:text-bottom;animation:none}
+.bubble .tw-cursor.on{opacity:1}
+.bubble .tw-cursor.off{opacity:0}
+.bubble .tw-ch{display:inline-block;transform-origin:50% 85%}
 .bar{flex:1;height:3px;background:#22252d;border-radius:2px;overflow:hidden}
 .bar i{display:block;height:100%;background:var(--coding);transition:width .6s}
 #flog{list-style:none;margin-top:10px;display:flex;flex-direction:column;gap:6px;min-height:58px}

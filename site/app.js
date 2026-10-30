@@ -1,4 +1,8 @@
 import * as THREE from "three";
+import {
+  TYPEWRITER, drawOvershootGauge, overshootSpringValue,
+  typewriterCharCount, typewriterCharScale, typewriterCursorVisible,
+} from "./motion-prompt-motion.js";
 import { OrbitControls } from "three/addons/OrbitControls.js";
 import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
@@ -309,8 +313,42 @@ const freeTags = seats.filter((s) => !CFG.crew.some((b) => b.seat === s.i)).map(
 function say(id, text) {
   if (!tags[id]) return;
   bubbles[id]?.el.remove();
-  const el = document.createElement("div"); el.className = "bubble"; el.textContent = text; labelsEl.appendChild(el);
-  bubbles[id] = { el, until: performance.now() + 4200 };
+  const el = document.createElement("div");
+  el.className = "bubble";
+  el.innerHTML = '<span class="tw-chars"></span><span class="tw-cursor on"></span>';
+  labelsEl.appendChild(el);
+  const t0 = performance.now();
+  const len = [...text].length;
+  const doneMs = (TYPEWRITER.t0 + len * TYPEWRITER.dt + 1.4) * 1000;
+  bubbles[id] = {
+    el, t0, text, n: -1,
+    charsEl: el.querySelector(".tw-chars"),
+    cursorEl: el.querySelector(".tw-cursor"),
+    until: t0 + Math.max(4200, doneMs),
+  };
+}
+function updateTypewriterBubble(bb, now) {
+  const u = (now - bb.t0) / 1000;
+  const chars = [...bb.text];
+  const n = typewriterCharCount(u, chars.length);
+  if (n !== bb.n) {
+    bb.n = n;
+    bb.charsEl.innerHTML = chars.slice(0, n).map((ch, i) => {
+      const sc = typewriterCharScale(u, i);
+      return `<span class="tw-ch">${esc(ch)}</span>`;
+    }).join("");
+    bb.charsEl.querySelectorAll(".tw-ch").forEach((node, i) => {
+      const sc = typewriterCharScale(u, i);
+      node.style.transform = sc > 1.01 ? `scale(${sc})` : "";
+    });
+  } else {
+    bb.charsEl.querySelectorAll(".tw-ch").forEach((node, i) => {
+      const sc = typewriterCharScale(u, i);
+      node.style.transform = sc > 1.01 ? `scale(${sc})` : "";
+    });
+  }
+  bb.cursorEl.classList.toggle("on", !!typewriterCursorVisible(u, chars.length));
+  bb.cursorEl.classList.toggle("off", !typewriterCursorVisible(u, chars.length));
 }
 const v3 = new THREE.Vector3();
 function project(p, out) {
@@ -331,7 +369,10 @@ function placeLabels(now) {
     const bb = bubbles[b.id];
     if (bb) {
       if (now > bb.until) { bb.el.remove(); delete bubbles[b.id]; }
-      else { bb.el.style.left = scr.x + "px"; bb.el.style.top = scr.y - 30 + "px"; }
+      else {
+        bb.el.style.left = scr.x + "px"; bb.el.style.top = scr.y - 30 + "px";
+        updateTypewriterBubble(bb, now);
+      }
     }
   }
   for (const { el, s } of freeTags) {
@@ -353,8 +394,26 @@ function countStatuses() {
   return n;
 }
 const setHTML = (el, h) => { if (el._h !== h) { el.innerHTML = h; el._h = h; } };
+const gaugeCanvas = $("#fgauge");
+const gaugeCtx = gaugeCanvas.getContext("2d");
+const gaugeAnim = { display: 0, target: 0, t0: 0, active: false, key: "" };
+function startGaugeAnim(target) {
+  gaugeAnim.target = target;
+  gaugeAnim.t0 = performance.now() / 1000;
+  gaugeAnim.active = true;
+}
+function drawFocusGauge() {
+  const f = state.bots[state.focus];
+  const target = clampTaskRatio(f.task.step, f.task.steps);
+  drawOvershootGauge(gaugeCtx, 270, 104, gaugeAnim.display, target);
+}
+function clampTaskRatio(step, steps) {
+  return steps > 0 ? Math.min(1, Math.max(0, step / steps)) : 0;
+}
 function renderHUD() {
-  const n = countStatuses(), free = seats.length - CFG.crew.length;
+  const n = countStatuses();
+  const seated = CFG.crew.filter((b) => b.seat != null && seats[b.seat]).length;
+  const free = Math.max(0, seats.length - seated);
   const chips = [["working", n.working, STATUS.coding.c], ["needs you", n.needs_you, STATUS.needs_you.c], ["done", n.done, STATUS.done.c],
     ["idle", n.idle, STATUS.idle.c], ["free seats", free, "#cfd1d8"]];
   if (n.error) chips.splice(2, 0, ["error", n.error, STATUS.error.c]);
@@ -371,9 +430,15 @@ function renderHUD() {
   $("#fsub").textContent = `${f.role} · updated ${ago < 60 ? ago + "s" : Math.round(ago / 60) + "m"} ago`;
   $("#fpill").outerHTML = pill(f.status).replace('class="pill"', 'class="pill" id="fpill"');
   $("#ftitle").textContent = f.task.title;
-  $("#fbar").style.width = (100 * f.task.step / f.task.steps) + "%";
+  const gKey = `${state.focus}:${f.task.step}/${f.task.steps}`;
+  if (gKey !== gaugeAnim.key) {
+    gaugeAnim.key = gKey;
+    startGaugeAnim(clampTaskRatio(f.task.step, f.task.steps));
+  }
+  $("#fbar").style.width = `${100 * gaugeAnim.display}%`;
   $("#fbar").style.background = STATUS[f.status].c;
   $("#fstep").textContent = `step ${f.task.step} of ${f.task.steps}`;
+  drawFocusGauge();
   setHTML($("#flog"), f.log.slice(0, 4).map((l) => `<li><time>${l.t}</time><i class="dot" style="background:${STATUS[l.s].c}"></i>${esc(l.text)}</li>`).join(""));
   const gn = $(".gonogo");
   gn.classList.toggle("live", !!f.ask);
@@ -495,6 +560,17 @@ function frame() {
     if (sec % 5 === 0) renderHUD();
   }
   drawVideoWall(now);
+  if (gaugeAnim.active) {
+    const localU = performance.now() / 1000 - gaugeAnim.t0;
+    gaugeAnim.display = overshootSpringValue(localU, gaugeAnim.target);
+    if (localU >= 3.5 || (localU > 1.2 && Math.abs(gaugeAnim.display - gaugeAnim.target) < 0.008)) {
+      gaugeAnim.display = gaugeAnim.target;
+      gaugeAnim.active = false;
+    }
+    const f = state.bots[state.focus];
+    $("#fbar").style.width = `${100 * gaugeAnim.display}%`;
+    drawFocusGauge();
+  }
   camera.getWorldDirection(camDir);
   const camYaw = Math.atan2(-camDir.x, -camDir.z);
   for (const b of CFG.crew) {
